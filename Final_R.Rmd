@@ -1,0 +1,132 @@
+---
+title: "FinalProject"
+author: "Yuxuan Wang"
+date: "2022-12-10"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+Loading packages
+
+```{r}
+library(topicmodels)
+library(slam)
+library(ggplot2)
+library(MASS)
+library(faraway)
+```
+
+Implementing LDA. The data are constructed from python. You should run Final_python.ipynb before running this file.
+
+```{r}
+ii=read.table('result_data/i.txt')
+i1=as.matrix(ii)
+jj=read.table('result_data/j.txt')
+j1=as.matrix(jj)
+vv=read.table('result_data/v.txt')
+v1=as.matrix(vv)
+dim(v1)<-c(3502965,1)
+v1=as.vector(v1)
+theMatrix=simple_triplet_matrix(i=i1,j=j1,v=v1) 
+LDA_object = LDA(theMatrix,10, method = "Gibbs", control= NULL, model = NULL)
+topic = LDA_object@gamma
+topic_prob = LDA_object@beta
+save(LDA_object,file='result_data/LDA_k10.Rdata')
+write.csv(topic,file='result_data/LDA.csv')
+write.csv(t(topic_prob), 'result_data/topics_k10.csv')
+```
+
+After sentiment analysis by python and LDA by R, we now have all dependent variables.
+Now we can start to construct the data frame energy, information, desicion, lifestyle as the four axis of 16 MBTI type.
+
+```{r}
+target = read.table('result_data/mbti_target.csv')
+sentiment = read.table("result_data/sentiment.csv", sep = ',')
+Energy = rep(0, dim(target)[1])
+Information = rep(0, dim(target)[1])
+Decision = rep(0, dim(target)[1])
+Lifestyle = rep(0, dim(target)[1])
+for (i in 1: 8673){
+  mbti <- target[i,]
+  Energy[i] <- (substr(mbti, 1, 1) == 'E')
+  Information[i] <- (substr(mbti, 2, 2) == 'S')
+  Decision[i] <- (substr(mbti, 3, 3) == 'T')
+  Lifestyle[i] <- (substr(mbti, 4, 4) == 'J')
+}
+```
+
+Start building model and select dependent variables for Energy axis model.
+
+```{r}
+df_E = data.frame(topics = topic, mbti = Energy, sentiment = sentiment)
+col_names = c("Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7", "Topic8", "Topic9", "Topic10", "Energy", "neg", "pos")
+colnames(df_E) = col_names
+modelE = glm(Energy~.-Topic10, data = df_E, family = binomial(link = "logit"))
+modelE_final = glm(Energy~.-Topic2-Topic4-Topic6-neg-Topic10, data = df_E, family = binomial(link = "logit"))
+#summary(modelE)
+BIC(modelE)
+BIC(modelE_final)
+summary(modelE_final)
+confint(modelE_final)
+```
+
+Start building model and select dependent variables for Information axis model.
+
+```{r}
+df_I = data.frame(topics = topic, mbti = Information, sentiment = sentiment)
+col_names = c("Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7", "Topic8", "Topic9", "Topic10", "Information", "neg", "pos")
+colnames(df_I) = col_names
+modelI = glm(Information~.-Topic10, data = df_I, family = binomial(link = "logit"))
+#summary(modelI)
+BIC(modelI)
+modelI_final = glm(Information~.-neg-Topic10, data = df_I, family = binomial(link = "logit"))
+BIC(modelI_final)
+summary(modelI_final)
+```
+
+Start building model and select dependent variables for Decision axis model.
+
+```{r}
+df_D = data.frame(topics = topic, mbti = Decision, sentiment = sentiment)
+col_names = c("Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7", "Topic8", "Topic9", "Topic10", "Decision", "neg", "pos")
+colnames(df_D) = col_names
+modelD = glm(Decision~.-Topic10, data = df_D, family = binomial(link = "logit"))
+modelD_final = glm(Decision~.-neg-Topic10, data = df_D, family = binomial(link = "logit"))
+#summary(modelD)
+BIC(modelD)
+BIC(modelD_final)
+summary(modelD_final)
+```
+
+Start building model and select dependent variables for Lifestyle axis model.
+
+```{r}
+df_L = data.frame(topics = topic, mbti = Lifestyle, sentiment = sentiment)
+col_names = c("Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7", "Topic8", "Topic9", "Topic10", "Lifestyle", "neg", "pos")
+colnames(df_L) = col_names
+modelL = glm(Lifestyle~.-Topic10, data = df_L, family = binomial(link = "logit"))
+modelL_final = glm(Lifestyle~.-neg-pos-Topic1-Topic4-Topic7-Topic10, data = df_L, family = binomial(link = "logit"))
+#summary(modelL_final)
+BIC(modelL)
+BIC(modelL_final)
+summary(modelL_final)
+```
+
+Some plots for data check.
+
+```{r}
+plot(modelE_final, which = 4, id.n = 3, main = "")
+```
+```{r}
+halfnorm(rstudent(modelE_final))
+```
+Data check
+
+```{r}
+anova(modelE_final,modelE)
+anova(modelI_final,modelI)
+anova(modelD_final,modelD)
+anova(modelL_final,modelL)
+```
+
